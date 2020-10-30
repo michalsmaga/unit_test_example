@@ -1,0 +1,93 @@
+#ToDo:
+# Logi MySQLa
+
+# Logi PHPów
+
+# Composer - inny od reszty katalog aplikacji. Co można z tym zrobić?
+# Composer - nie jest respektowany przekazany parametr ze ścieżką do katalogu cache.
+#   Kwestia uruchamiania jako nie superuser?
+
+# phpunit - jak przekazać wersję PHP do Dockerfile
+#   potrzeba cocker >= 17.0.5
+
+# nginx - Czy jest możliwosć przekzania do pliku konfiguracyjnego nginx:
+#   nazwy kontenera z php fpm - NIEMOŻLIWE
+#   domeny - NIEMOŻLIWE
+
+# php-fpm - jak przekazać wersję PHP do Dockerfile
+#   potrzeba cocker >= 17.0.5
+
+# Nowe kontenery: Centralny serwer logów, postgresql, redis
+
+# Skrypty instalujące potrzebne programy i rozszerzenia aby PHPy były tak samo skonfigurowane.
+
+# Restart kontenerów w razie potrzeb.
+
+# Restart po awarii maszyny.
+
+# Kolorowanie promptu w kontenerach
+
+version: '3'
+
+services:
+
+    composer:
+        image: composer:latest
+        environment:
+            - COMPOSER_CACHE_DIR=${CONTAINER_CODE_DIR}/.cache/composer
+        volumes:
+#            - ./${HOST_CODE_DIR}:${CONTAINER_CODE_DIR}:rw,z
+            - ./${HOST_CODE_DIR}:/app:rw,z
+        user: ${USER_GROUP}
+
+    ut-phpunit:
+        build:
+            context: .
+            dockerfile: ./.docker/php-cli/Dockerfile
+            args:
+                PHP_VESRION: ${PHP_VESRION}
+        volumes:
+            - ./${HOST_CODE_DIR}:${CONTAINER_CODE_DIR}:rw,z
+        working_dir: ${CONTAINER_CODE_DIR}
+        entrypoint: vendor/bin/phpunit
+        links:
+            - ut-mysql
+
+    ut-nginx:
+        image: nginx:alpine
+        container_name: ut-nginx
+        ports:
+            - 80:80
+        volumes:
+            - ./${HOST_CODE_DIR}:${CONTAINER_CODE_DIR}:rw,z
+            - ./.docker/nginx/site.conf:/etc/nginx/conf.d/site.conf:rw,z
+            - /var/log/httpd/${PROJECT_NAME}/:/var/log/nginx/:rw,z
+        links:
+            - ut-php-fpm
+
+    ut-php-fpm:
+        build:
+            context: .
+            dockerfile: ./.docker/php-fpm/Dockerfile
+        container_name: ut-php-fpm
+        volumes:
+            - ./${HOST_CODE_DIR}:${CONTAINER_CODE_DIR}:rw,z
+        links:
+            - ut-mysql
+
+    ut-mysql:
+        image: mysql:${MYSQL_VERSION}
+        container_name: ut-mysql
+        ports:
+            - 3306:3306
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+        volumes:
+            - dbdatatest:/var/lib/mysql
+
+volumes:
+    dbdatatest:
+        driver: local
